@@ -10,7 +10,7 @@
       margin: 0;
       padding: 10px;
     }
-    /* Word formation drop boxes at the top */
+    /* Word formation drop boxes (top of page) */
     #word-boxes {
       display: flex;
       justify-content: center;
@@ -26,49 +26,31 @@
       justify-content: center;
       position: relative;
     }
-    /* Dropdown menu for controls */
-    #menu-container {
-      position: relative;
-      display: inline-block;
+    /* Physical control buttons */
+    #controls {
+      text-align: center;
       margin-bottom: 20px;
     }
-    #menu-button {
+    #controls button {
       padding: 10px 15px;
       font-size: 16px;
+      margin: 0 5px;
     }
-    #menu-content {
-      display: none;
-      position: absolute;
-      background-color: #f9f9f9;
-      min-width: 160px;
-      box-shadow: 0px 8px 16px rgba(0,0,0,0.2);
-      z-index: 100;
-    }
-    #menu-content button {
-      width: 100%;
-      padding: 10px;
-      border: none;
-      background: none;
-      text-align: left;
-      cursor: pointer;
-    }
-    #menu-content button:hover {
-      background-color: #ddd;
-    }
-    /* Reset bin – drop here to return a letter to its home cell */
-    #reset-bin {
+    /* Recycle bin area for resetting an individual tile */
+    #recycle-bin {
       width: 100%;
       height: 50px;
-      border: 2px solid #666;
-      margin-bottom: 20px;
-      text-align: center;
-      line-height: 50px;
+      border: 2px dashed #666;
+      margin: 10px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: #666;
     }
-    /* Alphabet grid – a fixed grid of letter cells */
+    /* Alphabet grid: 26 cells (one per letter) arranged in 13 columns */
     #alphabet-grid {
       display: grid;
-      grid-template-columns: repeat(7, 1fr);
+      grid-template-columns: repeat(13, 1fr);
       gap: 10px;
     }
     .letter-cell {
@@ -76,10 +58,6 @@
       height: 70px;
       border: 1px dashed #aaa;
       position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      /* A subtle background to indicate the cell’s spot */
       background-color: #f0f0f0;
     }
     /* Draggable tile styling */
@@ -92,19 +70,16 @@
       justify-content: center;
       font-size: 24px;
       font-weight: bold;
-      cursor: pointer;
       user-select: none;
-      touch-action: none; /* Helps mobile devices track dragging */
-      /* Default pastel red for vowels */
-      background-color: #FFC1C1;
-      /* When inside a cell we want it to line up, so default to relative */
-      position: relative;
-      top: 0;
-      left: 0;
+      touch-action: none; /* helps mobile dragging */
+      cursor: pointer;
     }
-    /* Pastel blue for consonants */
+    /* Pastel colors: pastel red for vowels, pastel blue for consonants */
+    .tile.vowel {
+      background-color: #ffcccc;
+    }
     .tile.consonant {
-      background-color: #C1D4FF;
+      background-color: #ccccff;
     }
   </style>
 </head>
@@ -123,139 +98,144 @@
     <div class="drop-box"></div>
   </div>
 
-  <!-- Dropdown menu for controls -->
-  <div id="menu-container">
-    <button id="menu-button">Menu</button>
-    <div id="menu-content">
-      <button id="speak-word">Speak Word</button>
-      <button id="define-word">Define Word</button>
-      <button id="reset-all">Reset All</button>
-    </div>
+  <!-- Physical control buttons -->
+  <div id="controls">
+    <button id="speak-word">Speak Word</button>
+    <button id="define-word">Define Word</button>
+    <button id="reset-all">Reset All</button>
   </div>
 
-  <!-- Reset bin (drag a tile here to return it to its home cell) -->
-  <div id="reset-bin">Drag letter here to reset</div>
+  <!-- Recycle bin area -->
+  <div id="recycle-bin">Drop tile here to reset</div>
 
-  <!-- Alphabet grid with one letter cell (and tile) per letter A–Z -->
+  <!-- Alphabet grid: 26 cells, one per letter, each with a stack of 3 tiles -->
   <div id="alphabet-grid"></div>
 
   <script>
-    // Only allow one active drag at a time (helps with mobile performance)
+    // Global variables for drag management
     let currentDrag = null;
+    const dragThreshold = 5; // pixels to move before initiating a drag
+    const vowels = ['A','E','I','O','U'];
 
-    // Function to speak text using the Web Speech API
+    // Utility: speak text using Web Speech API
     function speakText(text) {
       const utterance = new SpeechSynthesisUtterance(text);
       window.speechSynthesis.speak(utterance);
     }
 
-    // Toggle the dropdown menu visibility
-    document.getElementById('menu-button').addEventListener('click', function() {
-      const menu = document.getElementById('menu-content');
-      menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
-    });
+    // Function to restack tiles in a cell (with a slight offset for each)
+    function restackCell(cell) {
+      const tiles = cell.querySelectorAll('.tile');
+      tiles.forEach((tile, index) => {
+        tile.style.position = "absolute";
+        tile.style.left = (index * 5) + "px";
+        tile.style.top = (index * 5) + "px";
+        tile.style.zIndex = index;
+      });
+    }
 
-    // Close the dropdown if clicking outside of it
-    document.addEventListener('click', function(e) {
-      const menuContainer = document.getElementById('menu-container');
-      if (!menuContainer.contains(e.target)) {
-        document.getElementById('menu-content').style.display = 'none';
-      }
-    });
-
-    // Create the alphabet grid – one cell per letter
+    // Build the alphabet grid:
+    // – One cell per letter (A–Z) arranged in a 13-column grid.
+    // – In each cell, create three copies of that letter (stacked).
     const alphabetGrid = document.getElementById('alphabet-grid');
-    const vowels = ['A', 'E', 'I', 'O', 'U'];
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    // We'll also keep a mapping from letter to its cell for easy resets.
+    const letterCells = {};
     letters.forEach(letter => {
-      // Create cell
       const cell = document.createElement('div');
       cell.classList.add('letter-cell');
       cell.dataset.letter = letter;
-
-      // Create tile for the letter
-      const tile = document.createElement('div');
-      tile.classList.add('tile');
-      tile.textContent = letter;
-      tile.dataset.letter = letter;
-      if (!vowels.includes(letter)) {
-        tile.classList.add('consonant');
+      letterCells[letter] = cell;
+      // Create three tiles for this letter
+      for (let i = 0; i < 3; i++) {
+        const tile = document.createElement('div');
+        tile.classList.add('tile');
+        tile.textContent = letter;
+        tile.dataset.letter = letter;
+        // Apply color based on vowel/consonant
+        if (vowels.includes(letter)) {
+          tile.classList.add('vowel');
+        } else {
+          tile.classList.add('consonant');
+        }
+        // Store a reference to its home cell for resetting
+        tile.homeCell = cell;
+        // Add pointer event listeners
+        tile.addEventListener('pointerdown', pointerDown);
+        tile.addEventListener('pointermove', pointerMove);
+        tile.addEventListener('pointerup', pointerUp);
+        tile.addEventListener('pointercancel', pointerUp);
+        cell.appendChild(tile);
       }
-      // Store a reference to the home cell so the tile can be reset
-      tile.homeCell = cell;
-
-      // Add pointer event listeners for dragging/tapping
-      tile.addEventListener('pointerdown', pointerDown);
-      tile.addEventListener('pointermove', pointerMove);
-      tile.addEventListener('pointerup', pointerUp);
-      tile.addEventListener('pointercancel', pointerUp);
-
-      // Place the tile into its home cell
-      cell.appendChild(tile);
+      // Stack the three tiles with a slight offset
+      restackCell(cell);
       alphabetGrid.appendChild(cell);
     });
 
-    // Utility: return the center point of an element
-    function getElementCenter(el) {
-      const rect = el.getBoundingClientRect();
-      return {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2
-      };
-    }
-
-    // --- Drag & Drop Handlers (single active drag only) ---
-
+    // --- Pointer Event Handlers for Drag/Drop ---
     function pointerDown(e) {
-      if (currentDrag) return; // ignore if already dragging a tile
-      e.preventDefault();
+      // Only allow one drag at a time
+      if (currentDrag) return;
       const tile = e.currentTarget;
+      const rect = tile.getBoundingClientRect();
       currentDrag = {
         tile: tile,
-        offsetX: e.clientX - tile.getBoundingClientRect().left,
-        offsetY: e.clientY - tile.getBoundingClientRect().top,
         startX: e.clientX,
         startY: e.clientY,
-        // Remember its current parent so we can compare later
+        // Record the offset from the tile’s top‑left where the pointer was pressed
+        offsetX: e.clientX - rect.left,
+        offsetY: e.clientY - rect.top,
+        dragging: false,
         originalParent: tile.parentElement
       };
-      // Remove the tile from its parent so it can float over the page
-      document.body.appendChild(tile);
-      tile.style.zIndex = 1000;
-      // Use pointer capture to keep tracking even if your finger drifts
       tile.setPointerCapture(e.pointerId);
     }
 
     function pointerMove(e) {
       if (!currentDrag) return;
-      const { tile, offsetX, offsetY } = currentDrag;
-      // Position the tile so that your pointer stays at the same offset
-      tile.style.left = (e.clientX - offsetX) + 'px';
-      tile.style.top = (e.clientY - offsetY) + 'px';
+      const { tile, startX, startY, offsetX, offsetY, dragging } = currentDrag;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (!dragging && dist > dragThreshold) {
+        // Start the drag: reparent the tile to document.body
+        currentDrag.dragging = true;
+        // Recalculate offset based on current position (to reduce any jump)
+        const rect = tile.getBoundingClientRect();
+        currentDrag.offsetX = e.clientX - rect.left;
+        currentDrag.offsetY = e.clientY - rect.top;
+        document.body.appendChild(tile);
+        tile.style.position = "fixed";
+        tile.style.zIndex = 1000;
+      }
+      if (currentDrag.dragging) {
+        // Update tile’s position so it stays under the finger
+        tile.style.left = (e.clientX - currentDrag.offsetX) + "px";
+        tile.style.top = (e.clientY - currentDrag.offsetY) + "px";
+      }
     }
 
     function pointerUp(e) {
       if (!currentDrag) return;
-      const { tile, startX, startY } = currentDrag;
-      // Determine if this was a tap (minimal movement)
+      const { tile, startX, startY, dragging, originalParent } = currentDrag;
+      tile.releasePointerCapture(e.pointerId);
+      // If no significant movement occurred, treat this as a tap (speak the letter)
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const tapThreshold = 5;
-      if (distance < tapThreshold) {
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (!dragging || dist < dragThreshold) {
         speakText(tile.textContent);
+        currentDrag = null;
+        return;
       }
-      
-      // Get the center of the tile for drop-zone checking
+      // When the drag ends, determine where the tile was dropped.
       const tileRect = tile.getBoundingClientRect();
       const tileCenter = {
         x: tileRect.left + tileRect.width / 2,
         y: tileRect.top + tileRect.height / 2
       };
-
       let dropped = false;
-
-      // Check if dropped in one of the word boxes (only if the box is empty)
+      // 1. Check if dropped in one of the word boxes (only if empty)
       document.querySelectorAll('.drop-box').forEach(box => {
         const rect = box.getBoundingClientRect();
         if (
@@ -265,61 +245,60 @@
           tileCenter.y <= rect.bottom
         ) {
           if (box.children.length === 0) {
-            // Snap the tile into the word box – let CSS handle layout
-            tile.style.position = 'static';
-            tile.style.left = '';
-            tile.style.top = '';
-            tile.style.zIndex = '';
+            // Snap tile into the word box
+            tile.style.position = "static";
+            tile.style.left = "";
+            tile.style.top = "";
+            tile.style.zIndex = "";
             box.appendChild(tile);
             dropped = true;
           }
         }
       });
-
-      // Check if dropped in the reset bin – return to its home cell
-      const resetBin = document.getElementById('reset-bin');
-      const binRect = resetBin.getBoundingClientRect();
+      // 2. Check if dropped in the recycle bin area
+      const recycleBin = document.getElementById('recycle-bin');
+      const binRect = recycleBin.getBoundingClientRect();
       if (
         tileCenter.x >= binRect.left &&
         tileCenter.x <= binRect.right &&
         tileCenter.y >= binRect.top &&
         tileCenter.y <= binRect.bottom
       ) {
-        const homeCell = tile.homeCell;
-        // Clear any existing tile (should be empty)
-        homeCell.innerHTML = "";
-        homeCell.appendChild(tile);
-        tile.style.position = "relative";
+        // Return the tile to its home cell and restack that cell
+        tile.style.position = "absolute";
         tile.style.left = "";
         tile.style.top = "";
         tile.style.zIndex = "";
+        tile.homeCell.appendChild(tile);
+        restackCell(tile.homeCell);
         dropped = true;
       }
-
-      // If not dropped in a valid zone, let the tile remain where it is (free-floating)
-      tile.releasePointerCapture(e.pointerId);
+      // 3. If not dropped in a valid zone, snap it back to its original parent
+      if (!dropped) {
+        tile.style.position = "absolute";
+        tile.style.left = "";
+        tile.style.top = "";
+        tile.style.zIndex = "";
+        originalParent.appendChild(tile);
+        restackCell(originalParent);
+      }
       currentDrag = null;
     }
 
-    // --- Controls in the Dropdown Menu ---
-
-    // Speak the word formed in the word boxes (left-to-right)
-    document.getElementById('speak-word').addEventListener('click', function() {
+    // --- Control Button Handlers ---
+    document.getElementById('speak-word').addEventListener('click', () => {
       let word = "";
-      document.querySelectorAll(".drop-box").forEach(box => {
+      document.querySelectorAll('.drop-box').forEach(box => {
         if (box.children.length > 0) {
           word += box.children[0].textContent;
         }
       });
-      if (word) {
-        speakText(word);
-      }
+      if (word) speakText(word);
     });
 
-    // Fetch the definition for the formed word and speak it aloud
-    document.getElementById("define-word").addEventListener("click", function() {
+    document.getElementById('define-word').addEventListener('click', () => {
       let word = "";
-      document.querySelectorAll(".drop-box").forEach(box => {
+      document.querySelectorAll('.drop-box').forEach(box => {
         if (box.children.length > 0) {
           word += box.children[0].textContent;
         }
@@ -351,21 +330,19 @@
       }
     });
 
-    // Reset all letters: return every tile back to its home cell and clear the word boxes
-    document.getElementById("reset-all").addEventListener("click", function() {
-      // Reset each tile in the alphabet grid
-      document.querySelectorAll(".tile").forEach(tile => {
-        const homeCell = tile.homeCell;
-        homeCell.innerHTML = "";
-        homeCell.appendChild(tile);
-        tile.style.position = "relative";
+    document.getElementById('reset-all').addEventListener('click', () => {
+      // Clear all word boxes
+      document.querySelectorAll('.drop-box').forEach(box => {
+        box.innerHTML = "";
+      });
+      // For every tile, return it to its home cell and restack that cell
+      document.querySelectorAll('.tile').forEach(tile => {
+        tile.style.position = "absolute";
         tile.style.left = "";
         tile.style.top = "";
         tile.style.zIndex = "";
-      });
-      // Clear all word boxes
-      document.querySelectorAll(".drop-box").forEach(box => {
-        box.innerHTML = "";
+        tile.homeCell.appendChild(tile);
+        restackCell(tile.homeCell);
       });
     });
   </script>
