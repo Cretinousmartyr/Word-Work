@@ -1,63 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Word Work Game</title>
   <style>
-    /* Container for the drop boxes (word formation area) */
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 10px;
+    }
+    /* Word formation drop boxes at the top */
     #word-boxes {
       display: flex;
       justify-content: center;
       margin-bottom: 20px;
     }
     .drop-box {
-      width: 50px;
-      height: 50px;
+      width: 70px;
+      height: 70px;
       border: 2px dashed #666;
       margin: 5px;
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
     }
-    /* Control buttons */
-    #controls {
-      text-align: center;
+    /* Dropdown menu for controls */
+    #menu-container {
+      position: relative;
+      display: inline-block;
       margin-bottom: 20px;
     }
-    #controls button {
-      margin: 0 10px;
+    #menu-button {
       padding: 10px 15px;
       font-size: 16px;
     }
-    /* Letter bank where all the tiles start */
-    #letter-bank {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      border: 2px solid #ccc;
-      padding: 10px;
-      min-height: 150px;
+    #menu-content {
+      display: none;
+      position: absolute;
+      background-color: #f9f9f9;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px rgba(0,0,0,0.2);
+      z-index: 100;
     }
-    /* Letter tile styling */
-    .tile {
-      width: 40px;
-      height: 40px;
-      border: 1px solid #333;
-      margin: 5px;
+    #menu-content button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      background: none;
+      text-align: left;
+      cursor: pointer;
+    }
+    #menu-content button:hover {
+      background-color: #ddd;
+    }
+    /* Reset bin – drop here to return a letter to its home cell */
+    #reset-bin {
+      width: 100%;
+      height: 50px;
+      border: 2px solid #666;
+      margin-bottom: 20px;
+      text-align: center;
+      line-height: 50px;
+      color: #666;
+    }
+    /* Alphabet grid – a fixed grid of letter cells */
+    #alphabet-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+    }
+    .letter-cell {
+      width: 70px;
+      height: 70px;
+      border: 1px dashed #aaa;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
+      /* A subtle background to indicate the cell’s spot */
+      background-color: #f0f0f0;
+    }
+    /* Draggable tile styling */
+    .tile {
+      width: 70px;
+      height: 70px;
+      border: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
       cursor: pointer;
       user-select: none;
-      /* Initially tiles will be in the document flow; when dragged they become absolute */
+      touch-action: none; /* Helps mobile devices track dragging */
+      /* Default pastel red for vowels */
+      background-color: #FFC1C1;
+      /* When inside a cell we want it to line up, so default to relative */
       position: relative;
+      top: 0;
+      left: 0;
+    }
+    /* Pastel blue for consonants */
+    .tile.consonant {
+      background-color: #C1D4FF;
     }
   </style>
 </head>
 <body>
-  <!-- Word boxes (drop zones) -->
+  <!-- Word formation area (10 drop boxes) -->
   <div id="word-boxes">
     <div class="drop-box"></div>
     <div class="drop-box"></div>
@@ -70,138 +122,191 @@
     <div class="drop-box"></div>
     <div class="drop-box"></div>
   </div>
-  
-  <!-- Control buttons -->
-  <div id="controls">
-    <button id="speak-word">Speak Word</button>
-    <button id="define-word">Define Word</button>
-    <button id="reset">Reset</button>
-  </div>
-  
-  <!-- Letter bank (tiles will be generated here) -->
-  <div id="letter-bank"></div>
-  
-  <script>
-    // Global object to keep track of active drags (by pointerId)
-    const activeDrags = {};
 
-    // Function to speak a given text using the Web Speech API
+  <!-- Dropdown menu for controls -->
+  <div id="menu-container">
+    <button id="menu-button">Menu</button>
+    <div id="menu-content">
+      <button id="speak-word">Speak Word</button>
+      <button id="define-word">Define Word</button>
+      <button id="reset-all">Reset All</button>
+    </div>
+  </div>
+
+  <!-- Reset bin (drag a tile here to return it to its home cell) -->
+  <div id="reset-bin">Drag letter here to reset</div>
+
+  <!-- Alphabet grid with one letter cell (and tile) per letter A–Z -->
+  <div id="alphabet-grid"></div>
+
+  <script>
+    // Only allow one active drag at a time (helps with mobile performance)
+    let currentDrag = null;
+
+    // Function to speak text using the Web Speech API
     function speakText(text) {
       const utterance = new SpeechSynthesisUtterance(text);
       window.speechSynthesis.speak(utterance);
     }
 
-    // Pointer event handlers for tiles
+    // Toggle the dropdown menu visibility
+    document.getElementById('menu-button').addEventListener('click', function() {
+      const menu = document.getElementById('menu-content');
+      menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+    });
+
+    // Close the dropdown if clicking outside of it
+    document.addEventListener('click', function(e) {
+      const menuContainer = document.getElementById('menu-container');
+      if (!menuContainer.contains(e.target)) {
+        document.getElementById('menu-content').style.display = 'none';
+      }
+    });
+
+    // Create the alphabet grid – one cell per letter
+    const alphabetGrid = document.getElementById('alphabet-grid');
+    const vowels = ['A', 'E', 'I', 'O', 'U'];
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    letters.forEach(letter => {
+      // Create cell
+      const cell = document.createElement('div');
+      cell.classList.add('letter-cell');
+      cell.dataset.letter = letter;
+
+      // Create tile for the letter
+      const tile = document.createElement('div');
+      tile.classList.add('tile');
+      tile.textContent = letter;
+      tile.dataset.letter = letter;
+      if (!vowels.includes(letter)) {
+        tile.classList.add('consonant');
+      }
+      // Store a reference to the home cell so the tile can be reset
+      tile.homeCell = cell;
+
+      // Add pointer event listeners for dragging/tapping
+      tile.addEventListener('pointerdown', pointerDown);
+      tile.addEventListener('pointermove', pointerMove);
+      tile.addEventListener('pointerup', pointerUp);
+      tile.addEventListener('pointercancel', pointerUp);
+
+      // Place the tile into its home cell
+      cell.appendChild(tile);
+      alphabetGrid.appendChild(cell);
+    });
+
+    // Utility: return the center point of an element
+    function getElementCenter(el) {
+      const rect = el.getBoundingClientRect();
+      return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2
+      };
+    }
+
+    // --- Drag & Drop Handlers (single active drag only) ---
+
     function pointerDown(e) {
+      if (currentDrag) return; // ignore if already dragging a tile
       e.preventDefault();
       const tile = e.currentTarget;
-      
-      // Get the tile's current position (in viewport coordinates)
-      const rect = tile.getBoundingClientRect();
-      
-      // If the tile is currently in a drop box, remove it so that the box becomes empty
-      if (tile.parentElement.classList.contains('drop-box')) {
-        document.getElementById('letter-bank').appendChild(tile);
-        // Set its absolute position so it doesn’t jump
-        tile.style.position = 'absolute';
-        tile.style.left = rect.left + 'px';
-        tile.style.top = rect.top + 'px';
-      } else {
-        // Even if in the letter bank, set to absolute so it can move freely.
-        tile.style.position = 'absolute';
-        tile.style.left = rect.left + 'px';
-        tile.style.top = rect.top + 'px';
-      }
-      // Bring tile to the front while dragging
-      tile.style.zIndex = 1000;
-      
-      // Record the pointer’s starting position and the offset within the tile
-      activeDrags[e.pointerId] = {
+      currentDrag = {
         tile: tile,
-        offsetX: e.clientX - rect.left,
-        offsetY: e.clientY - rect.top,
+        offsetX: e.clientX - tile.getBoundingClientRect().left,
+        offsetY: e.clientY - tile.getBoundingClientRect().top,
         startX: e.clientX,
         startY: e.clientY,
+        // Remember its current parent so we can compare later
+        originalParent: tile.parentElement
       };
+      // Remove the tile from its parent so it can float over the page
+      document.body.appendChild(tile);
+      tile.style.zIndex = 1000;
+      // Use pointer capture to keep tracking even if your finger drifts
       tile.setPointerCapture(e.pointerId);
     }
 
     function pointerMove(e) {
-      if (!activeDrags[e.pointerId]) return;
-      const dragData = activeDrags[e.pointerId];
-      const tile = dragData.tile;
-      // Update tile position so that the pointer’s offset is maintained
-      tile.style.left = (e.clientX - dragData.offsetX) + 'px';
-      tile.style.top = (e.clientY - dragData.offsetY) + 'px';
+      if (!currentDrag) return;
+      const { tile, offsetX, offsetY } = currentDrag;
+      // Position the tile so that your pointer stays at the same offset
+      tile.style.left = (e.clientX - offsetX) + 'px';
+      tile.style.top = (e.clientY - offsetY) + 'px';
     }
 
     function pointerUp(e) {
-      if (!activeDrags[e.pointerId]) return;
-      const dragData = activeDrags[e.pointerId];
-      const tile = dragData.tile;
-
-      // If the pointer didn’t move very far, treat it as a tap to speak the letter.
-      const dx = e.clientX - dragData.startX;
-      const dy = e.clientY - dragData.startY;
+      if (!currentDrag) return;
+      const { tile, startX, startY } = currentDrag;
+      // Determine if this was a tap (minimal movement)
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
       const distance = Math.sqrt(dx * dx + dy * dy);
       const tapThreshold = 5;
       if (distance < tapThreshold) {
         speakText(tile.textContent);
       }
       
-      // Get the center of the tile to check for drop-box collisions.
+      // Get the center of the tile for drop-zone checking
       const tileRect = tile.getBoundingClientRect();
-      const tileCenterX = tileRect.left + tileRect.width / 2;
-      const tileCenterY = tileRect.top + tileRect.height / 2;
-      
-      let droppedInBox = false;
-      // Look through all drop boxes and see if the center point is inside one.
+      const tileCenter = {
+        x: tileRect.left + tileRect.width / 2,
+        y: tileRect.top + tileRect.height / 2
+      };
+
+      let dropped = false;
+
+      // Check if dropped in one of the word boxes (only if the box is empty)
       document.querySelectorAll('.drop-box').forEach(box => {
-        const boxRect = box.getBoundingClientRect();
-        if (tileCenterX >= boxRect.left && tileCenterX <= boxRect.right &&
-            tileCenterY >= boxRect.top && tileCenterY <= boxRect.bottom) {
-          // Only drop the tile if the box is empty.
+        const rect = box.getBoundingClientRect();
+        if (
+          tileCenter.x >= rect.left &&
+          tileCenter.x <= rect.right &&
+          tileCenter.y >= rect.top &&
+          tileCenter.y <= rect.bottom
+        ) {
           if (box.children.length === 0) {
-            // Snap the tile into the box by appending it and letting CSS position it naturally.
+            // Snap the tile into the word box – let CSS handle layout
             tile.style.position = 'static';
             tile.style.left = '';
             tile.style.top = '';
             tile.style.zIndex = '';
             box.appendChild(tile);
-            droppedInBox = true;
+            dropped = true;
           }
         }
       });
-      
-      // If not dropped in a box, the tile remains where it was dropped.
+
+      // Check if dropped in the reset bin – return to its home cell
+      const resetBin = document.getElementById('reset-bin');
+      const binRect = resetBin.getBoundingClientRect();
+      if (
+        tileCenter.x >= binRect.left &&
+        tileCenter.x <= binRect.right &&
+        tileCenter.y >= binRect.top &&
+        tileCenter.y <= binRect.bottom
+      ) {
+        const homeCell = tile.homeCell;
+        // Clear any existing tile (should be empty)
+        homeCell.innerHTML = "";
+        homeCell.appendChild(tile);
+        tile.style.position = "relative";
+        tile.style.left = "";
+        tile.style.top = "";
+        tile.style.zIndex = "";
+        dropped = true;
+      }
+
+      // If not dropped in a valid zone, let the tile remain where it is (free-floating)
       tile.releasePointerCapture(e.pointerId);
-      delete activeDrags[e.pointerId];
+      currentDrag = null;
     }
 
-    // Generate the letter tiles (3 copies of each letter A–Z)
-    const vowels = ['A', 'E', 'I', 'O', 'U'];
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-    const letterBank = document.getElementById('letter-bank');
-    letters.forEach(letter => {
-      for (let i = 0; i < 3; i++) {
-        const tile = document.createElement('div');
-        tile.classList.add('tile');
-        tile.textContent = letter;
-        // Color vowels a light red and consonants a light blue
-        tile.style.backgroundColor = vowels.includes(letter) ? '#ffcccc' : '#ccccff';
-        // Add pointer events so that the tile can be dragged or tapped
-        tile.addEventListener('pointerdown', pointerDown);
-        tile.addEventListener('pointermove', pointerMove);
-        tile.addEventListener('pointerup', pointerUp);
-        tile.addEventListener('pointercancel', pointerUp);
-        letterBank.appendChild(tile);
-      }
-    });
+    // --- Controls in the Dropdown Menu ---
 
-    // “Speak Word” button: collects letters from the drop boxes (in order) and speaks the word.
+    // Speak the word formed in the word boxes (left-to-right)
     document.getElementById('speak-word').addEventListener('click', function() {
-      let word = '';
-      document.querySelectorAll('.drop-box').forEach(box => {
+      let word = "";
+      document.querySelectorAll(".drop-box").forEach(box => {
         if (box.children.length > 0) {
           word += box.children[0].textContent;
         }
@@ -211,10 +316,10 @@
       }
     });
 
-    // “Define Word” button: uses a free dictionary API to look up the word.
-    document.getElementById('define-word').addEventListener('click', function() {
-      let word = '';
-      document.querySelectorAll('.drop-box').forEach(box => {
+    // Fetch the definition for the formed word and speak it aloud
+    document.getElementById("define-word").addEventListener("click", function() {
+      let word = "";
+      document.querySelectorAll(".drop-box").forEach(box => {
         if (box.children.length > 0) {
           word += box.children[0].textContent;
         }
@@ -223,12 +328,15 @@
         fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + word)
           .then(response => response.json())
           .then(data => {
+            let definition = "";
             if (Array.isArray(data) && data.length > 0) {
               const meanings = data[0].meanings;
               if (meanings && meanings.length > 0) {
                 const definitions = meanings[0].definitions;
                 if (definitions && definitions.length > 0) {
-                  alert("Definition of " + word + ":\n" + definitions[0].definition);
+                  definition = definitions[0].definition;
+                  alert("Definition of " + word + ":\n" + definition);
+                  speakText(definition);
                   return;
                 }
               }
@@ -243,15 +351,21 @@
       }
     });
 
-    // “Reset” button: moves every tile back to the letter bank and clears drop boxes.
-    document.getElementById('reset').addEventListener('click', function() {
-      const letterBank = document.getElementById('letter-bank');
-      document.querySelectorAll('.tile').forEach(tile => {
-        tile.style.position = '';
-        tile.style.left = '';
-        tile.style.top = '';
-        tile.style.zIndex = '';
-        letterBank.appendChild(tile);
+    // Reset all letters: return every tile back to its home cell and clear the word boxes
+    document.getElementById("reset-all").addEventListener("click", function() {
+      // Reset each tile in the alphabet grid
+      document.querySelectorAll(".tile").forEach(tile => {
+        const homeCell = tile.homeCell;
+        homeCell.innerHTML = "";
+        homeCell.appendChild(tile);
+        tile.style.position = "relative";
+        tile.style.left = "";
+        tile.style.top = "";
+        tile.style.zIndex = "";
+      });
+      // Clear all word boxes
+      document.querySelectorAll(".drop-box").forEach(box => {
+        box.innerHTML = "";
       });
     });
   </script>
