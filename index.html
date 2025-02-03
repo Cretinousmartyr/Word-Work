@@ -1,32 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <!-- Set viewport and enable web app (standalone) mode on mobile -->
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <link rel="manifest" href="manifest.json" />
+  <meta charset="UTF-8">
+  <!-- The viewport and web-app meta tags help lock the app's size -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.json">
   <title>Word Work Game</title>
   <style>
-    /* Basic resets and body styling */
+    /* Lock the viewport so everything fits without scrolling */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
     body {
       font-family: sans-serif;
-      margin: 0;
-      padding: 10px;
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      user-select: none;
+      padding: 5px;
+      box-sizing: border-box;
     }
-    /* Top Bar: Reset Bin and Reset All Button */
+    /* Top Bar: Recycle Bin and Reset All Button */
     #top-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 5px;
     }
     #recycle-bin {
-      width: 70%;
+      flex: 1;
       height: 50px;
       border: 2px dashed #666;
       display: flex;
@@ -34,22 +37,23 @@
       justify-content: center;
       font-size: 16px;
       color: #666;
+      margin-right: 5px;
     }
     #reset-all {
       padding: 10px 15px;
       font-size: 16px;
     }
-    /* Word Boxes for forming a word */
+    /* Word Boxes (for forming a word) */
     #word-boxes {
       display: flex;
       justify-content: center;
-      margin-bottom: 10px;
+      margin-bottom: 5px;
     }
     .drop-box {
       width: 80px;
       height: 80px;
       border: 2px dashed #666;
-      margin: 5px;
+      margin: 3px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -57,12 +61,12 @@
     }
     /* Alphabet Grid */
     #alphabet-grid {
-      margin-bottom: 10px;
+      margin-bottom: 5px;
     }
     .letter-row {
       display: flex;
       justify-content: center;
-      margin-bottom: 10px;
+      margin-bottom: 5px;
     }
     .letter-cell {
       border: 1px dashed #aaa;
@@ -70,14 +74,10 @@
       background-color: #f0f0f0;
       margin: 3px;
     }
-    /* Big cells for rows 1 & 2; small cells for row 3 */
+    /* All cells are the same size */
     .big-cell {
       width: 80px;
       height: 80px;
-    }
-    .small-cell {
-      width: 60px;
-      height: 60px;
     }
     /* Draggable tile styling */
     .tile {
@@ -88,40 +88,35 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 32px; /* Bigger text */
+      font-size: 32px;  /* Bigger text */
       font-weight: bold;
       user-select: none;
       touch-action: none;
       cursor: pointer;
       box-sizing: border-box;
     }
-    /* Pastel colors: vowels get pastel red; consonants pastel blue */
+    /* Pastel colors: vowels in pastel red; consonants in pastel blue */
     .tile.vowel {
       background-color: #ffcccc;
     }
     .tile.consonant {
       background-color: #ccccff;
     }
-    /* Audio toggle container */
-    #audio-toggle-container {
-      text-align: center;
-      margin-bottom: 10px;
-    }
-    /* Hidden controls (Speak Word & Define Word) – hidden by default */
+    /* Hidden controls container (audio toggle, speak and define buttons) */
     #hidden-controls {
       display: none;
       text-align: center;
-      margin-bottom: 10px;
+      margin-top: 5px;
     }
     #hidden-controls button {
       padding: 10px 15px;
       font-size: 16px;
       margin: 5px;
     }
-    /* Unlock button for hidden controls */
+    /* Unlock Controls button */
     #unlock-button {
       display: block;
-      margin: 0 auto 10px;
+      margin: 10px auto;
       padding: 10px 15px;
       font-size: 16px;
     }
@@ -133,7 +128,7 @@
     <div id="recycle-bin">Drag letter here to reset</div>
     <button id="reset-all">Reset All</button>
   </div>
-
+  
   <!-- Word Boxes -->
   <div id="word-boxes">
     <div class="drop-box"></div>
@@ -147,49 +142,55 @@
     <div class="drop-box"></div>
     <div class="drop-box"></div>
   </div>
-
-  <!-- Alphabet Grid: 3 Rows -->
+  
+  <!-- Alphabet Grid: 3 Rows (Row 1: 9 letters, Row 2: 9 letters, Row 3: 8 letters) -->
   <div id="alphabet-grid">
     <div class="letter-row" id="row1"></div>
     <div class="letter-row" id="row2"></div>
     <div class="letter-row" id="row3"></div>
   </div>
-
-  <!-- Audio Toggle -->
-  <div id="audio-toggle-container">
-    <label><input type="checkbox" id="audio-toggle"> Audio Enabled</label>
-  </div>
-
-  <!-- Unlock Hidden Controls Button -->
+  
+  <!-- Unlock Controls: (The Audio Toggle and Speak/Define buttons are hidden until unlocked) -->
   <button id="unlock-button">Enter PIN to Unlock Controls</button>
-
-  <!-- Hidden Controls (Speak Word & Define Word) -->
   <div id="hidden-controls">
+    <label><input type="checkbox" id="audio-toggle"> Audio Enabled</label>
+    <br>
     <button id="speak-word">Speak Word</button>
     <button id="define-word">Define Word</button>
   </div>
-
+  
   <script>
     // Global variables for drag handling and audio
     let currentDrag = null;
-    const dragThreshold = 5; // pixels
+    const dragThreshold = 5; // pixels before initiating a drag
     let audioEnabled = false;
-    const correctPIN = "12426A";
+    // Set the correct PIN
+    const correctPIN = "2468";
     
-    // Update audio setting from the checkbox
-    const audioToggle = document.getElementById('audio-toggle');
-    audioToggle.addEventListener('change', function() {
-      audioEnabled = audioToggle.checked;
+    // Unlock Controls: prompt for PIN and reveal hidden controls if correct
+    document.getElementById('unlock-button').addEventListener('click', () => {
+      let pin = prompt("Enter PIN to unlock controls:");
+      if (pin === correctPIN) {
+        document.getElementById('hidden-controls').style.display = "block";
+        document.getElementById('unlock-button').style.display = "none";
+      } else {
+        alert("Incorrect PIN");
+      }
     });
     
-    // Speak text only if audio is enabled
+    // Update audio setting from the checkbox (inside hidden controls)
+    document.getElementById('audio-toggle').addEventListener('change', function() {
+      audioEnabled = this.checked;
+    });
+    
+    // Utility: speak text if audio is enabled
     function speakText(text) {
       if (!audioEnabled) return;
       const utterance = new SpeechSynthesisUtterance(text);
       window.speechSynthesis.speak(utterance);
     }
     
-    // Stack tiles inside a cell with a slight offset
+    // Utility: stack tiles in a cell with a slight offset
     function restackCell(cell) {
       const tiles = cell.querySelectorAll('.tile');
       tiles.forEach((tile, index) => {
@@ -199,17 +200,18 @@
       });
     }
     
-    // Build the alphabet grid: three rows (row1: 9 letters, row2: 9 letters, row3: 8 letters)
+    // Build the alphabet grid.
+    // We'll distribute 26 letters over three rows: row1 (9 letters), row2 (9 letters), row3 (8 letters)
     const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
     const row1 = document.getElementById('row1');
     const row2 = document.getElementById('row2');
     const row3 = document.getElementById('row3');
     const letterCells = {};
     
-    // Helper to create a letter cell (with three stacked tiles)
-    function createCell(letter, sizeClass) {
+    // Helper function to create a letter cell with three stacked tiles
+    function createCell(letter) {
       const cell = document.createElement('div');
-      cell.classList.add('letter-cell', sizeClass);
+      cell.classList.add('letter-cell', 'big-cell');
       cell.dataset.letter = letter;
       letterCells[letter] = cell;
       // Create three copies (tiles) for this letter
@@ -223,9 +225,8 @@
         } else {
           tile.classList.add('consonant');
         }
-        // Save home cell reference
-        tile.homeCell = cell;
-        // Add pointer events for dragging/tapping
+        tile.homeCell = cell;  // store a reference to the home cell
+        // Add pointer event listeners for dragging/tapping
         tile.addEventListener('pointerdown', pointerDown);
         tile.addEventListener('pointermove', pointerMove);
         tile.addEventListener('pointerup', pointerUp);
@@ -239,32 +240,32 @@
     let index = 0;
     for (let i = 0; i < 9; i++) {
       if (index < letters.length) {
-        const cell = createCell(letters[index], "big-cell");
+        const cell = createCell(letters[index]);
         row1.appendChild(cell);
         index++;
       }
     }
     for (let i = 0; i < 9; i++) {
       if (index < letters.length) {
-        const cell = createCell(letters[index], "big-cell");
+        const cell = createCell(letters[index]);
         row2.appendChild(cell);
         index++;
       }
     }
     for (let i = 0; i < 8; i++) {
       if (index < letters.length) {
-        const cell = createCell(letters[index], "small-cell");
+        const cell = createCell(letters[index]);
         row3.appendChild(cell);
         index++;
       }
     }
     
-    // Pointer Event Handlers
+    // Pointer event handlers for drag and drop
     function pointerDown(e) {
-      if (currentDrag) return; // only one drag at a time
+      if (currentDrag) return; // allow only one drag at a time
       const tile = e.currentTarget;
       const rect = tile.getBoundingClientRect();
-      // Fix the tile’s width and height to prevent scaling when reparented
+      // Fix the tile's dimensions so they remain constant when reparented
       tile.style.width = rect.width + "px";
       tile.style.height = rect.height + "px";
       currentDrag = {
@@ -284,10 +285,10 @@
       const { tile, startX, startY, offsetX, offsetY } = currentDrag;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      const dist = Math.sqrt(dx*dx + dy*dy);
+      const dist = Math.sqrt(dx * dx + dy * dy);
       if (!currentDrag.dragging && dist > dragThreshold) {
         currentDrag.dragging = true;
-        // Reparent tile to document.body so it can move freely
+        // Reparent tile to document.body for free dragging
         document.body.appendChild(tile);
         tile.style.position = "fixed";
         tile.style.zIndex = 1000;
@@ -304,29 +305,25 @@
       tile.releasePointerCapture(e.pointerId);
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      const dist = Math.sqrt(dx*dx + dy*dy);
+      const dist = Math.sqrt(dx * dx + dy * dy);
       if (!dragging || dist < dragThreshold) {
-        // Considered a tap; speak the letter if audio is enabled.
+        // Considered a tap—speak the letter (if audio is enabled)
         speakText(tile.textContent);
         currentDrag = null;
         return;
       }
       const tileRect = tile.getBoundingClientRect();
       const tileCenter = {
-        x: tileRect.left + tileRect.width/2,
-        y: tileRect.top + tileRect.height/2
+        x: tileRect.left + tileRect.width / 2,
+        y: tileRect.top + tileRect.height / 2
       };
       let dropped = false;
-      // 1. Check drop boxes (word boxes) – only if empty.
+      // 1. Check if dropped in one of the word boxes (only if empty)
       document.querySelectorAll('.drop-box').forEach(box => {
         const rect = box.getBoundingClientRect();
-        if (
-          tileCenter.x >= rect.left &&
-          tileCenter.x <= rect.right &&
-          tileCenter.y >= rect.top &&
-          tileCenter.y <= rect.bottom &&
-          box.children.length === 0
-        ) {
+        if (tileCenter.x >= rect.left && tileCenter.x <= rect.right &&
+            tileCenter.y >= rect.top && tileCenter.y <= rect.bottom &&
+            box.children.length === 0) {
           tile.style.position = "static";
           tile.style.left = "";
           tile.style.top = "";
@@ -335,15 +332,11 @@
           dropped = true;
         }
       });
-      // 2. Check if dropped in the recycle bin.
+      // 2. Check if dropped in the recycle bin area
       const recycleBin = document.getElementById('recycle-bin');
       const binRect = recycleBin.getBoundingClientRect();
-      if (
-        tileCenter.x >= binRect.left &&
-        tileCenter.x <= binRect.right &&
-        tileCenter.y >= binRect.top &&
-        tileCenter.y <= binRect.bottom
-      ) {
+      if (tileCenter.x >= binRect.left && tileCenter.x <= binRect.right &&
+          tileCenter.y >= binRect.top && tileCenter.y <= binRect.bottom) {
         tile.style.position = "absolute";
         tile.style.left = "";
         tile.style.top = "";
@@ -352,7 +345,7 @@
         restackCell(tile.homeCell);
         dropped = true;
       }
-      // 3. If not dropped in a valid zone, return it to its original parent.
+      // 3. Otherwise, return to the original parent
       if (!dropped) {
         tile.style.position = "absolute";
         tile.style.left = "";
@@ -364,13 +357,11 @@
       currentDrag = null;
     }
     
-    // Control Button Handlers
+    // Reset All: clear the drop boxes and return every tile to its home cell
     document.getElementById('reset-all').addEventListener('click', () => {
-      // Clear word boxes
       document.querySelectorAll('.drop-box').forEach(box => {
         box.innerHTML = "";
       });
-      // Return every tile to its home cell
       document.querySelectorAll('.tile').forEach(tile => {
         tile.style.position = "absolute";
         tile.style.left = "";
@@ -381,8 +372,8 @@
       });
     });
     
+    // Speak Word: concatenate letters from drop boxes and speak them
     document.getElementById('speak-word').addEventListener('click', () => {
-      if (!audioEnabled) return;
       let word = "";
       document.querySelectorAll('.drop-box').forEach(box => {
         if (box.children.length > 0) {
@@ -392,8 +383,8 @@
       if (word) speakText(word);
     });
     
+    // Define Word: fetch the definition and immediately speak it (no alert)
     document.getElementById('define-word').addEventListener('click', () => {
-      if (!audioEnabled) return;
       let word = "";
       document.querySelectorAll('.drop-box').forEach(box => {
         if (box.children.length > 0) {
@@ -411,30 +402,18 @@
                 const definitions = meanings[0].definitions;
                 if (definitions && definitions.length > 0) {
                   definition = definitions[0].definition;
-                  alert("Definition of " + word + ":\n" + definition);
                   speakText(definition);
                   return;
                 }
               }
             }
-            alert("Definition not found for " + word);
+            speakText("Definition not found for " + word);
           })
           .catch(err => {
-            alert("Error fetching definition for " + word);
+            speakText("Error fetching definition for " + word);
           });
       } else {
-        alert("No word formed.");
-      }
-    });
-    
-    // Unlock hidden controls via PIN prompt
-    document.getElementById('unlock-button').addEventListener('click', () => {
-      let pin = prompt("Enter PIN to unlock controls:");
-      if (pin === correctPIN) {
-        document.getElementById('hidden-controls').style.display = "block";
-        document.getElementById('unlock-button').style.display = "none";
-      } else {
-        alert("Incorrect PIN");
+        speakText("No word formed.");
       }
     });
   </script>
